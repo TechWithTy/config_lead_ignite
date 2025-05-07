@@ -1,0 +1,124 @@
+flowchart TD
+    %% USER DOMAIN
+    User[User]
+    UserProfile[UserProfile]
+    ContactInfo[ContactInfo]
+    LocationInfo[LocationInfo]
+    OnboardingStatus[OnboardingStatus]
+    FeatureFlags[FeatureFlags]
+    UserSettings[UserSettings]
+    SavedSearch[SavedSearch]
+    
+    %% COMPANY & MARKETING DOMAIN
+    CompanyInfo[CompanyInfo]
+    MarketingProfile[MarketingProfile]
+    CompanyInfo --> MarketingProfile
+    User --> CompanyInfo
+    User --> MarketingProfile
+    MarketingProfile -->|references| SocialLinks
+    
+    %% TEAM & ORG DOMAIN
+    GlobalTeam[GlobalTeam]
+    TeamMember[TeamMember]
+    Invitation[Invitation]
+    User --> GlobalTeam
+    GlobalTeam --> TeamMember
+    GlobalTeam --> Invitation
+    TeamMember --> User
+    Invitation --> User
+    
+    %% SOCIALS & BLOGS
+    SocialLinks[SocialLinks]
+    User --> SocialLinks
+    GlobalBlog[GlobalBlog]
+    User --> GlobalBlog
+    
+    %% CAMPAIGN DOMAIN
+    GlobalCampaign[GlobalCampaign]
+    CampaignBase[CampaignBase]
+    CallCampaign[CallCampaign]
+    SocialCampaign[SocialCampaign]
+    TextCampaign[TextCampaign]
+    EmailCampaign[EmailCampaign]
+    User --> GlobalCampaign
+    GlobalCampaign --> CampaignBase
+    CampaignBase --> CallCampaign
+    CampaignBase --> SocialCampaign
+    CampaignBase --> TextCampaign
+    CampaignBase --> EmailCampaign
+    CampaignBase --> LeadBase
+    CampaignBase --> EventBase
+    
+    %% LEADS & EVENTS
+    LeadBase[LeadBase]
+    MLSRealEstateLead[MLSRealEstateLead]
+    LeadBase --> MLSRealEstateLead
+    EventBase[EventBase]
+    CallEvent[CallEvent]
+    SocialEvent[SocialEvent]
+    TextEvent[TextEvent]
+    EmailEvent[EmailEvent]
+    EventBase --> CallEvent
+    EventBase --> SocialEvent
+    EventBase --> TextEvent
+    EventBase --> EmailEvent
+    LeadBase -->|touched by| EventBase
+    
+    %% GLOBAL ANALYTICS, RESEARCH, KANBAN, AI, BILLING, SETTINGS
+    GlobalAnalytics[GlobalAnalytics]
+    GlobalResearchStats[GlobalResearchStats]
+    GlobalKanban[GlobalKanban]
+    GlobalAIConfig[GlobalAIConfig]
+    GlobalAIContext[GlobalAIContext]
+    GlobalBilling[GlobalBilling]
+    GlobalUserSettings[GlobalUserSettings]
+    
+    User --> GlobalAnalytics
+    User --> GlobalResearchStats
+    User --> GlobalKanban
+    User --> GlobalAIConfig
+    User --> GlobalAIContext
+    User --> GlobalBilling
+    User --> GlobalUserSettings
+    User --> FeatureFlags
+    User --> SavedSearch
+    User --> OnboardingStatus
+    User --> ContactInfo
+    User --> LocationInfo
+    
+    %% GLOBALS RELATIONS
+    GlobalAnalytics --> GlobalResearchStats
+    GlobalAnalytics --> CampaignBase
+    GlobalKanban --> GlobalBlog
+    GlobalUserSettings --> FeatureFlags
+    GlobalUserSettings --> SavedSearch
+    GlobalUserSettings --> Security
+    GlobalUserSettings --> Connections
+    GlobalUserSettings -->|controls| GlobalAIConfig
+    GlobalUserSettings -->|controls| GlobalAIContext
+    GlobalUserSettings -->|controls| GlobalAnalytics
+    GlobalUserSettings -->|controls| GlobalKanban
+    GlobalUserSettings -->|controls| GlobalBilling
+    GlobalUserSettings -->|controls| GlobalBlog
+    GlobalUserSettings -->|controls| GlobalCampaign
+    
+    %% SETTINGS SUBDOMAIN
+    Security[Security]
+    Connections[Connections]
+    Connections --> ConnectedAccounts
+    Connections --> OAuthData
+    Connections --> OAuthProvider
+    Security --> TwoFactorAuth
+    Security --> RecoveryCodes
+    Security --> LoginHistory
+    Security --> Permissions
+    
+    %% SEGMENTATION & TAGGING
+    CampaignBase -->|segmentation| MarketingProfile
+    CampaignBase -->|segmentation| CompanyInfo
+    CampaignBase -->|segmentation| GlobalUserSettings
+    LeadBase -->|segmentation| MarketingProfile
+    LeadBase -->|segmentation| CompanyInfo
+    
+    %% SOFT DELETE, AUDIT, TIMESTAMPS (implicit on all major nodes)
+    %% (not shown for brevity)
