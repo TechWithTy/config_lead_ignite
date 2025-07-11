@@ -36,6 +36,7 @@ from config_lead_ignite._data.user.blogs.global_blog import GlobalBlog
 from config_lead_ignite._data.user.campaign.global_campaign import GlobalCampaign
 from config_lead_ignite._data.user.ai_config.global_ai_config import GlobalAIConfig
 from config_lead_ignite._data.user.context.global_ai_context import GlobalAIContext
+from config_lead_ignite._data.user.media.media_models import MediaAsset
 
 # --- User Settings & Misc ---
 from config_lead_ignite._data.user.settings.global_user_settings import GlobalUserSettings
@@ -46,6 +47,7 @@ class User(BaseModel):
     # === Core Identity ===
     pii: PII
     contact: ContactInfo
+    media: List[MediaAsset]
     location: LocationInfo
     onboarding: OnboardingStatus
 
