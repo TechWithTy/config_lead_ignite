@@ -1,7 +1,6 @@
 """Constants and default values for the affiliate system."""
-from datetime import timedelta
 from decimal import Decimal
-from typing import Dict, Any
+from datetime import timedelta
 
 # Default commission rates by tier (as Decimal for financial precision)
 COMMISSION_RATES = {

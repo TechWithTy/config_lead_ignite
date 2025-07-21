@@ -1,15 +1,13 @@
 """Pydantic models for the affiliate system."""
-from datetime import datetime, date
-from typing import List, Optional, Dict, Any, Union
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+from typing import Optional
 from pydantic import (
     BaseModel, 
     Field, 
     HttpUrl, 
-    EmailStr, 
     validator, 
-    root_validator,
-    condecimal,
-    constr
+    root_validator
 )
 from .enums import (
     NetworkSize, 
@@ -20,18 +18,32 @@ from .enums import (
     PayoutSchedule,
     CommissionTier
 )
-from ..core import CoreIdentity
 
 class BankAccountInfo(BaseModel):
     """Sensitive bank account information for payouts."""
-    bank_name: str = Field(..., min_length=2, max_length=100, 
-                         description="Name of the financial institution")
-    account_holder_name: str = Field(..., min_length=2, max_length=100,
-                                   description="Name as it appears on the account")
-    routing_number: constr(regex=r'^\d{9}$') = Field(..., 
-                                                   description="9-digit routing number")
-    account_number: constr(min_length=4, max_length=17) = Field(..., 
-                                                             description="Account number")
+    bank_name: str = Field(
+        ..., 
+        min_length=2, 
+        max_length=100,
+        description="Name of the financial institution"
+    )
+    account_holder_name: str = Field(
+        ..., 
+        min_length=2, 
+        max_length=100,
+        description="Name as it appears on the account"
+    )
+    routing_number: str = Field(
+        ..., 
+        regex=r'^\d{9}$',
+        description="9-digit routing number"
+    )
+    account_number: str = Field(
+        ...,
+        min_length=4,
+        max_length=17,
+        description="Account number"
+    )
     account_type: AccountType = Field(..., 
                                     description="Type of bank account")
     last_four: str = Field(..., regex=r'^\d{4}$', 
@@ -81,8 +93,12 @@ class AffiliateProfile(BaseModel):
                              description="Primary social media handle")
     website: Optional[HttpUrl] = Field(None, 
                                      description="Affiliate's website or blog")
-    commission_rate: condecimal(ge=0, le=1, max_digits=5, decimal_places=4) = Field(
-        default=0.1, 
+    commission_rate: Decimal = Field(
+        default=Decimal('0.1'),
+        ge=Decimal('0'),
+        le=Decimal('1'),
+        max_digits=5,
+        decimal_places=4,
         description="Commission rate as decimal (e.g., 0.1 for 10%)"
     )
     tier: CommissionTier = Field(CommissionTier.STANDARD, 
@@ -108,6 +124,21 @@ class AffiliateProfile(BaseModel):
         None,
         description="Date of the last successful payout"
     )
+    next_payout_date: Optional[datetime] = Field(
+        None,
+        description="Scheduled date for the next payout"
+    )
+    payout_schedule: PayoutSchedule = Field(
+        PayoutSchedule.MONTHLY,
+        description="Preferred payout schedule"
+    )
+    minimum_payout: Decimal = Field(
+        default=Decimal('50.00'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
+        description="Minimum balance required for payout"
+    )
     
     # Relationships
     bank_account: Optional[BankAccountInfo] = None
@@ -116,19 +147,25 @@ class AffiliateProfile(BaseModel):
     # Performance metrics (cached values)
     total_referrals: int = Field(0, ge=0)
     active_referrals: int = Field(0, ge=0)
-    total_commissions: condecimal(max_digits=12, decimal_places=2) = Field(
-        default=0,
-        ge=0,
+    total_commissions: Decimal = Field(
+        default=Decimal('0'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
         description="Total commissions earned (in base currency)"
     )
-    pending_payout: condecimal(max_digits=12, decimal_places=2) = Field(
-        default=0,
-        ge=0,
+    pending_payout: Decimal = Field(
+        default=Decimal('0'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
         description="Commissions awaiting payout"
     )
-    lifetime_earnings: condecimal(max_digits=12, decimal_places=2) = Field(
-        default=0,
-        ge=0,
+    lifetime_earnings: Decimal = Field(
+        default=Decimal('0'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
         description="Total earnings including paid out and pending"
     )
     
@@ -156,7 +193,10 @@ class AffiliateProfile(BaseModel):
                 "active_referrals": 28,
                 "total_commissions": 1250.75,
                 "pending_payout": 325.50,
-                "lifetime_earnings": 3250.25
+                "lifetime_earnings": 3250.25,
+                "next_payout_date": "2023-07-31T00:00:00Z",
+                "payout_schedule": "monthly",
+                "minimum_payout": 50.00
             }
         }
     
@@ -166,24 +206,61 @@ class AffiliateProfile(BaseModel):
     
     @root_validator
     def calculate_lifetime_earnings(cls, values):
-        """Calculate lifetime earnings from total and pending payouts."""
+        """Calculate lifetime earnings and next payout date."""
         total = values.get('total_commissions', 0)
         pending = values.get('pending_payout', 0)
         values['lifetime_earnings'] = total + pending
+        
+        # Calculate next payout date if not set
+        if not values.get('next_payout_date') and values.get('payout_schedule'):
+            now = datetime.utcnow()
+            schedule = values.get('payout_schedule', PayoutSchedule.MONTHLY)
+            
+            if schedule == PayoutSchedule.WEEKLY:
+                delta = timedelta(weeks=1)
+            elif schedule == PayoutSchedule.BIWEEKLY:
+                delta = timedelta(weeks=2)
+            elif schedule == PayoutSchedule.QUARTERLY:
+                delta = timedelta(weeks=13)  # Approximate
+            else:  # MONTHLY
+                # Handle month boundaries
+                next_month = now.month % 12 + 1
+                year = now.year + (1 if next_month == 1 else 0)
+                try:
+                    next_date = now.replace(month=next_month, day=1, year=year)
+                except ValueError:
+                    # Handle invalid date (e.g., Feb 30)
+                    next_date = now.replace(month=next_month, day=28, year=year)
+                values['next_payout_date'] = next_date
+                return values
+                
+            values['next_payout_date'] = now + delta
+            
         return values
 
 class AffiliatePayout(BaseModel):
-    """Represents a payout to an affiliate."""
+    """Represents a payout to an affiliate with schedule tracking."""
     id: str = Field(..., description="Unique identifier for the payout")
     affiliate_id: str = Field(..., description="Reference to affiliate")
-    amount: condecimal(ge=0.01, max_digits=12, decimal_places=2) = Field(
+    amount: Decimal = Field(
         ...,
+        ge=Decimal('0.01'),
+        max_digits=12,
+        decimal_places=2,
         description="Payout amount in the specified currency"
     )
     currency: str = Field("USD", min_length=3, max_length=3,
                         description="ISO 4217 currency code")
     status: str = Field(..., 
-                       description="Status of the payout (pending, processing, paid, failed)")
+                       description="Status of the payout (scheduled, pending, processing, paid, failed, cancelled)")
+    is_recurring: bool = Field(
+        False,
+        description="Whether this is part of a recurring payout schedule"
+    )
+    schedule_id: Optional[str] = Field(
+        None,
+        description="ID of the recurring schedule if applicable"
+    )
     payment_method: PaymentMethod = Field(..., 
                                        description="Method used for the payout")
     reference_id: Optional[str] = Field(
@@ -232,12 +309,18 @@ class AffiliateReferral(BaseModel):
         None,
         description="When the referral was converted"
     )
-    conversion_value: condecimal(ge=0, max_digits=12, decimal_places=2) = Field(
-        0,
+    conversion_value: Decimal = Field(
+        default=Decimal('0'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
         description="Value of the conversion in base currency"
     )
-    commission_earned: condecimal(ge=0, max_digits=12, decimal_places=2) = Field(
-        0,
+    commission_earned: Decimal = Field(
+        default=Decimal('0'),
+        ge=Decimal('0'),
+        max_digits=12,
+        decimal_places=2,
         description="Commission earned from this referral"
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)

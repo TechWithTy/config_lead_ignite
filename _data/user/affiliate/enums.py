@@ -1,5 +1,5 @@
 """Enums for the affiliate system."""
-from enum import Enum, auto
+from enum import Enum
 
 class NetworkSize(str, Enum):
     """Represents the size of an affiliate's network."""
@@ -23,6 +23,8 @@ class AffiliateStatus(str, Enum):
 
 class RealEstateExperience(str, Enum):
     """Level of real estate experience."""
+    def _generate_next_value_(name, start, count, last_values):
+        return name.lower()  # noqa: ARG004
     YES = "yes"
     NO = "no"
     INDIRECT = "indirect"
