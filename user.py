@@ -42,6 +42,9 @@ from config_lead_ignite._data.user.media.media_models import MediaAsset
 from config_lead_ignite._data.user.settings.global_user_settings import GlobalUserSettings
 from config_lead_ignite._data.user.cache.saved_search import SavedSearch
 
+# --- Affiliate System ---
+from config_lead_ignite._data.user.affiliate.models import AffiliateProfile
+
 
 class User(BaseModel):
     # === Core Identity ===
@@ -74,6 +77,12 @@ class User(BaseModel):
     # === User Preferences & Saved Data ===
     user_settings: Optional[GlobalUserSettings] = Field(None, description="User settings")
     saved_searches: List[SavedSearch] = Field(default_factory=list, description="User's saved searches")
+
+    # === Affiliate System ===
+    affiliate_profile: Optional[AffiliateProfile] = Field(
+        None,
+        description="Affiliate profile and settings if user is an affiliate"
+    )
 
     # === Feature Flags & Archival ===
     feature_flags: dict = Field(default_factory=dict, description="Feature flags for staged rollouts (key: flag name, value: enabled)")

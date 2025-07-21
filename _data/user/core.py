@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, HttpUrl
+from typing import Optional, List, Dict, Any
+from enum import Enum
+from datetime import datetime
 
 class PII(BaseModel):
     """Personally Identifiable Information (PII) for the user.
@@ -30,6 +32,8 @@ class ContactInfo(BaseModel):
     alternate_email: Optional[str] = Field(None, description="User's alternate email address")
     phone_number: Optional[str] = Field(None, description="User's phone number")
     address: Optional[str] = Field(None, description="Mailing address")
+    company_email: Optional[str] = Field(None, description="User's company email address")
+    work_phone: Optional[str] = Field(None, description="User's work phone number")
 
 class LocationInfo(BaseModel):
     """User location details."""
@@ -38,6 +42,9 @@ class LocationInfo(BaseModel):
     country: Optional[str] = Field(None, description="User's country")
     timezone: Optional[str] = Field(None, description="User's timezone")
     coordinates: Optional[str] = Field(None, description="Lat/long coordinates")
+    zip_code: Optional[str] = Field(None, description="ZIP/Postal code")
+    address_line1: Optional[str] = Field(None, description="Address line 1")
+    address_line2: Optional[str] = Field(None, description="Address line 2")
 
 class SecuritySettings(BaseModel):
     """User security and authentication settings."""
@@ -59,6 +66,16 @@ class OnboardingStatus(BaseModel):
     steps_completed: int = Field(0, description="Number of steps completed")
     last_step: Optional[str] = Field(None, description="Last completed onboarding step")
 
+class CompanyInfo(BaseModel):
+    """Company information for users."""
+    name: Optional[str] = Field(None, description="Company name")
+    website: Optional[HttpUrl] = Field(None, description="Company website URL")
+    logo_url: Optional[HttpUrl] = Field(None, description="URL to company logo")
+    industry: Optional[str] = Field(None, description="Company industry")
+    description: Optional[str] = Field(None, description="Company description")
+    founded_year: Optional[int] = Field(None, description="Year company was founded")
+    linkedin_url: Optional[HttpUrl] = Field(None, description="Company LinkedIn URL")
+
 class CoreIdentity(BaseModel):
     """Core user identity, referencing PII, contact, and location models."""
     pii: PII
@@ -66,3 +83,4 @@ class CoreIdentity(BaseModel):
     location: LocationInfo
     security: SecuritySettings
     onboarding: OnboardingStatus
+    company: Optional[CompanyInfo] = Field(None, description="User's company information")
