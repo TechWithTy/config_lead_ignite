@@ -5,8 +5,10 @@
 # * Organized by domain for clarity and maintainability
 # ======================================================
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Dict, Any, Union
+from uuid import UUID, uuid4
+from datetime import datetime
 
 # --- Core Identity & Contact Info ---
 from config_lead_ignite._data.user.core import (
@@ -50,6 +52,17 @@ from config_lead_ignite._data.user.testing.models import (
     BetaTester, 
     PilotTester, 
     TesterType
+)
+
+# --- AI Chat Threads ---
+from config_lead_ignite._data.user.ai_chat_threads.models import (
+    Thread, 
+    Message, 
+    AIProfile,
+    ParticipantRole,
+    ThreadSettings,
+    MessageType,
+    MessageStatus
 )
 
 
@@ -101,12 +114,215 @@ class User(BaseModel):
         description="Pilot testing profile if user is a pilot tester"
     )
 
+    # === AI Chat Threads ===
+    ai_chat_threads: List[Thread] = Field(
+        default_factory=list,
+        description="List of AI chat threads the user is participating in"
+    )
+    ai_profiles: List[AIProfile] = Field(
+        default_factory=list,
+        description="User's custom AI profiles and configurations"
+    )
+    default_ai_profile_id: Optional[UUID] = Field(
+        None,
+        description="ID of the user's default AI profile"
+    )
+    
     # === Feature Flags & Archival ===
     feature_flags: dict = Field(default_factory=dict, description="Feature flags for staged rollouts (key: flag name, value: enabled)")
     is_deleted: bool = Field(False, description="Soft delete flag for user")
     archived_at: Optional[str] = Field(None, description="Archival timestamp (ISO 8601)")
 
+    # === AI Chat Thread Methods ===
+    
+    async def create_chat_thread(
+        self,
+        title: Optional[str] = None,
+        is_group: bool = False,
+        is_public: bool = False,
+        participant_ids: Optional[List[UUID]] = None,
+        ai_profile_ids: Optional[List[UUID]] = None,
+        settings: Optional[Dict[str, Any]] = None
+    ) -> Optional[Thread]:
+        """
+        Create a new chat thread with the current user as the creator.
+        
+        Args:
+            title: Optional title for the thread
+            is_group: Whether this is a group thread
+            is_public: Whether the thread is public
+            participant_ids: List of user IDs to add as participants
+            ai_profile_ids: List of AI profile IDs to add as participants
+            settings: Additional thread settings
+            
+        Returns:
+            The created thread or None if creation failed
+        """
+        try:
+            # Create the thread
+            thread = Thread(
+                title=title or f"Chat with {self.pii.first_name}",
+                creator_id=self.pii.user_id,
+                is_group=is_group,
+                is_public=is_public,
+                settings=settings or {}
+            )
+            
+            # Add to user's threads
+            self.ai_chat_threads.append(thread)
+            
+            # Add creator as admin
+            thread.add_participant(
+                user_id=self.pii.user_id,
+                role=ParticipantRole.ADMIN
+            )
+            
+            # Add other participants
+            if participant_ids:
+                for user_id in participant_ids:
+                    if user_id != self.pii.user_id:  # Don't add creator again
+                        thread.add_participant(
+                            user_id=user_id,
+                            role=ParticipantRole.USER
+                        )
+            
+            # Add AI participants
+            if ai_profile_ids:
+                for ai_profile_id in ai_profile_ids:
+                    thread.add_ai_participant(ai_profile_id)
+            
+            return thread
+            
+        except Exception as e:
+            print(f"Failed to create chat thread: {str(e)}")
+            return None
+    
+    def get_chat_thread(self, thread_id: UUID) -> Optional[Thread]:
+        """Get a chat thread by ID if the user has access to it."""
+        for thread in self.ai_chat_threads:
+            if thread.id == thread_id:
+                return thread
+        return None
+    
+    def get_chat_threads(
+        self,
+        include_archived: bool = False,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Thread]:
+        """
+        Get user's chat threads with pagination and filtering.
+        
+        Args:
+            include_archived: Whether to include archived threads
+            limit: Maximum number of threads to return
+            offset: Number of threads to skip for pagination
+            
+        Returns:
+            List of threads the user has access to
+        """
+        threads = [
+            t for t in self.ai_chat_threads
+            if include_archived or not t.is_archived
+        ]
+        
+        # Sort by most recently updated
+        threads.sort(key=lambda t: t.updated_at, reverse=True)
+        
+        return threads[offset:offset + limit]
+    
+    async def archive_chat_thread(self, thread_id: UUID) -> bool:
+        """Archive a chat thread."""
+        thread = self.get_chat_thread(thread_id)
+        if not thread:
+            return False
+            
+        thread.is_archived = True
+        thread.updated_at = datetime.utcnow()
+        return True
+    
+    async def unarchive_chat_thread(self, thread_id: UUID) -> bool:
+        """Unarchive a chat thread."""
+        thread = self.get_chat_thread(thread_id)
+        if not thread:
+            return False
+            
+        thread.is_archived = False
+        thread.updated_at = datetime.utcnow()
+        return True
+    
+    async def delete_chat_thread(self, thread_id: UUID) -> bool:
+        """Permanently delete a chat thread."""
+        thread = self.get_chat_thread(thread_id)
+        if not thread:
+            return False
+            
+        # Check if user has permission to delete
+        participant = thread.get_participant(self.pii.user_id)
+        if not participant or participant.role not in [ParticipantRole.ADMIN, ParticipantRole.OWNER]:
+            return False
+            
+        # Remove from user's threads
+        self.ai_chat_threads = [t for t in self.ai_chat_threads if t.id != thread_id]
+        return True
+    
+    # === AI Profile Management ===
+    
+    def add_ai_profile(self, profile: AIProfile) -> bool:
+        """Add an AI profile to the user's collection."""
+        if not isinstance(profile, AIProfile):
+            return False
+            
+        # Check for duplicate ID
+        if any(p.id == profile.id for p in self.ai_profiles):
+            return False
+            
+        self.ai_profiles.append(profile)
+        
+        # Set as default if this is the first profile
+        if len(self.ai_profiles) == 1:
+            self.default_ai_profile_id = profile.id
+            
+        return True
+    
+    def get_ai_profile(self, profile_id: UUID) -> Optional[AIProfile]:
+        """Get an AI profile by ID."""
+        return next((p for p in self.ai_profiles if p.id == profile_id), None)
+    
+    def set_default_ai_profile(self, profile_id: UUID) -> bool:
+        """Set the default AI profile."""
+        if any(p.id == profile_id for p in self.ai_profiles):
+            self.default_ai_profile_id = profile_id
+            return True
+        return False
+    
+    def remove_ai_profile(self, profile_id: UUID) -> bool:
+        """Remove an AI profile."""
+        initial_count = len(self.ai_profiles)
+        self.ai_profiles = [p for p in self.ai_profiles if p.id != profile_id]
+        
+        # Update default if needed
+        if self.default_ai_profile_id == profile_id:
+            self.default_ai_profile_id = self.ai_profiles[0].id if self.ai_profiles else None
+            
+        return len(self.ai_profiles) < initial_count
+    
     # === Validation & Utilities ===
+    
+    @field_validator('default_ai_profile_id')
+    def validate_default_ai_profile(cls, v, values):
+        """Validate that the default_ai_profile_id exists in ai_profiles."""
+        if v is None:
+            return v
+            
+        if 'ai_profiles' not in values:
+            return v
+            
+        if not any(p.id == v for p in values['ai_profiles']):
+            # Reset to None if the referenced profile doesn't exist
+            return None
+            
+        return v
     @classmethod
     def validate_unique(cls, users: List['User'], user_id: str, email: str, tenant_id: str) -> bool:
         """
