@@ -65,8 +65,17 @@ from config_lead_ignite._data.user.ai_chat_threads.models import (
     MessageStatus
 )
 
+# --- Shopping Cart ---
+from config_lead_ignite._data.user.cart import CartState
+
 
 class User(BaseModel):
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Initialize cart with user ID if available
+        if hasattr(self, 'pii') and hasattr(self.pii, 'user_id') and hasattr(self, 'cart') and not self.cart.user_id:
+            self.cart.user_id = str(self.pii.user_id)
+
     # === Core Identity ===
     pii: PII
     contact: ContactInfo
@@ -126,6 +135,12 @@ class User(BaseModel):
     default_ai_profile_id: Optional[UUID] = Field(
         None,
         description="ID of the user's default AI profile"
+    )
+    
+    # === Shopping Cart ===
+    cart: CartState = Field(
+        default_factory=CartState,
+        description="User's shopping cart"
     )
     
     # === Feature Flags & Archival ===
