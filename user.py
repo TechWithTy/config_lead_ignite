@@ -45,6 +45,13 @@ from config_lead_ignite._data.user.cache.saved_search import SavedSearch
 # --- Affiliate System ---
 from config_lead_ignite._data.user.affiliate.models import AffiliateProfile
 
+# --- Testing Program ---
+from config_lead_ignite._data.user.testing.models import (
+    BetaTester, 
+    PilotTester, 
+    TesterType
+)
+
 
 class User(BaseModel):
     # === Core Identity ===
@@ -84,6 +91,16 @@ class User(BaseModel):
         description="Affiliate profile and settings if user is an affiliate"
     )
 
+    # === Testing Program ===
+    beta_tester: Optional[BetaTester] = Field(
+        None,
+        description="Beta testing profile if user is a beta tester"
+    )
+    pilot_tester: Optional[PilotTester] = Field(
+        None,
+        description="Pilot testing profile if user is a pilot tester"
+    )
+
     # === Feature Flags & Archival ===
     feature_flags: dict = Field(default_factory=dict, description="Feature flags for staged rollouts (key: flag name, value: enabled)")
     is_deleted: bool = Field(False, description="Soft delete flag for user")
@@ -100,9 +117,50 @@ class User(BaseModel):
             if user.pii.user_id == user_id or user.contact.email == email or getattr(user, 'tenant_id', None) == tenant_id:
                 return False
         return True
+    
+    def update_testing_profile(self, tester_data: dict):
+        """
+        Update or create a testing profile for the user.
+        
+        Args:
+            tester_data: Dictionary containing tester information
+            
+        Returns:
+            The updated testing profile (BetaTester or PilotTester)
+        """
+        from config_lead_ignite._data.user.testing.models import TesterType
+        
+        tester_type = tester_data.get('tester_type')
+        
+        if tester_type == TesterType.BETA:
+            if self.beta_tester is None:
+                self.beta_tester = BetaTester(
+                    user_id=self.pii.user_id,
+                    **tester_data
+                )
+            else:
+                # Update existing beta tester
+                for key, value in tester_data.items():
+                    if hasattr(self.beta_tester, key):
+                        setattr(self.beta_tester, key, value)
+            return self.beta_tester
+            
+        elif tester_type == TesterType.PILOT:
+            if self.pilot_tester is None:
+                self.pilot_tester = PilotTester(
+                    user_id=self.pii.user_id,
+                    **tester_data
+                )
+            else:
+                # Update existing pilot tester
+                for key, value in tester_data.items():
+                    if hasattr(self.pilot_tester, key):
+                        setattr(self.pilot_tester, key, value)
+            return self.pilot_tester
+            
+        return None
 
 # * End of User model
-        return True
 
     class Config:
         use_enum_values = True
